@@ -88,18 +88,24 @@ class LitSVTRv2(L.LightningModule):
         label_indices = batch["label_indices"]  # Already encoded
         label_lengths = batch["label_length"]
         
-        # Forward pass
+        # Forward pass for loss calculation (use training mode to get logits)
+        # We need logits for CTC loss, not probabilities
+        self.model.train()
+        preds_for_loss = self.model(images)
+        self.model.eval()
+        
+        # Forward pass for post-processing (use eval mode to get probabilities)
         preds = self.model(images)
         
-        # Calculate loss
+        # Calculate loss using logits
         loss_batch = {
             "label_indices": label_indices,
             "label_length": label_lengths,
         }
-        loss_dict = self.loss_fn(preds, loss_batch)
+        loss_dict = self.loss_fn(preds_for_loss, loss_batch)
         loss = loss_dict["loss"]
         
-        # Post-process predictions
+        # Post-process predictions (use probabilities from eval mode)
         pred_texts = self.postprocess(preds, batch=None, torch_tensor=True)
         
         # Prepare labels for metric

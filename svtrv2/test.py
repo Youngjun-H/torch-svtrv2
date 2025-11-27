@@ -7,6 +7,7 @@ from infer import SVTRv2Inference
 # 설정
 config_path = "configs/svtrv2_rctc.yml"
 checkpoint_path = "/home/yjhwang/work/torch-svtrv2/last.ckpt"
+checkpoint_path = "/home/yjhwang/work/torch-svtrv2/checkpoint-epoch=44-val_loss=0.000.ckpt"
 # image_path = "path/to/image.jpg"
 
 # Inference 초기화

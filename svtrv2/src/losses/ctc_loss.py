@@ -28,7 +28,15 @@ class CTCLoss(nn.Module):
         else:
             label, label_length = batch[1], batch[2]
         
-        predicts = predicts.log_softmax(2)
+        # Check if predicts are already probabilities (from eval mode) or logits
+        # If min >= 0 and max <= 1, likely probabilities, convert to log space
+        # Otherwise, assume logits and apply log_softmax
+        if predicts.min() >= 0 and predicts.max() <= 1.0 + 1e-6:
+            # Already probabilities (from eval mode), convert to log space
+            predicts = torch.log(predicts + 1e-8)
+        else:
+            # Logits, apply log_softmax
+            predicts = predicts.log_softmax(2)
         predicts = predicts.permute(1, 0, 2)  # [W, B, C]
         preds_lengths = torch.tensor(
             [predicts.size(0)] * batch_size, dtype=torch.long, device=predicts.device

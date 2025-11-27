@@ -98,11 +98,12 @@ def main():
     
     checkpoint_callback = ModelCheckpoint(
         dirpath=output_dir,
-        filename="checkpoint-{epoch:02d}-{val_loss:.3f}",
+        filename="checkpoint-epoch{epoch:02d}-valloss{val_loss:.3f}",
         monitor="val/loss",
         mode="min",
         save_top_k=3,
         save_last=True,
+        auto_insert_metric_name=False,
     )
     callbacks.append(checkpoint_callback)
 

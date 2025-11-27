@@ -11,7 +11,9 @@ class SVTRv2DataModule(L.LightningDataModule):
     def __init__(
         self,
         train_data_dir,
+        train_jsonl_paths=None,
         val_data_dir=None,
+        val_jsonl_paths=None,
         batch_size=32,
         num_workers=4,
         train_transforms=None,
@@ -23,8 +25,10 @@ class SVTRv2DataModule(L.LightningDataModule):
     ):
         """
         Args:
-            train_data_dir: Directory containing training data (with dataset.jsonl)
+            train_data_dir: Directory containing training data
+            train_jsonl_paths: List of paths to training JSONL files (optional)
             val_data_dir: Directory containing validation data (optional)
+            val_jsonl_paths: List of paths to validation JSONL files (optional)
             batch_size: Batch size
             num_workers: Number of data loading workers
             train_transforms: Transforms for training
@@ -36,7 +40,9 @@ class SVTRv2DataModule(L.LightningDataModule):
         """
         super().__init__()
         self.train_data_dir = train_data_dir
+        self.train_jsonl_paths = train_jsonl_paths
         self.val_data_dir = val_data_dir
+        self.val_jsonl_paths = val_jsonl_paths
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.train_transforms = train_transforms or []
@@ -54,6 +60,7 @@ class SVTRv2DataModule(L.LightningDataModule):
         if stage == "fit" or stage is None:
             self.train_dataset = SVTRv2Dataset(
                 data_dir=self.train_data_dir,
+                jsonl_paths=self.train_jsonl_paths,
                 transforms=self.train_transforms,
                 base_h=self.base_h,
                 base_shape=self.base_shape,
@@ -61,9 +68,10 @@ class SVTRv2DataModule(L.LightningDataModule):
                 max_text_length=self.max_text_length,
             )
             
-            if self.val_data_dir:
+            if self.val_data_dir or self.val_jsonl_paths:
                 self.val_dataset = SVTRv2Dataset(
-                    data_dir=self.val_data_dir,
+                    data_dir=self.val_data_dir or self.train_data_dir,
+                    jsonl_paths=self.val_jsonl_paths,
                     transforms=self.val_transforms,
                     base_h=self.base_h,
                     base_shape=self.base_shape,

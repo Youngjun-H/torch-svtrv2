@@ -14,6 +14,7 @@ class SVTRv2Dataset(Dataset):
         self,
         data_dir,
         jsonl_path=None,
+        jsonl_paths=None,
         transforms=None,
         base_h=32,
         base_shape=None,
@@ -23,7 +24,8 @@ class SVTRv2Dataset(Dataset):
         """
         Args:
             data_dir: Root directory containing images
-            jsonl_path: Path to JSONL file (default: data_dir/dataset.jsonl)
+            jsonl_path: Path to single JSONL file (for backward compatibility)
+            jsonl_paths: List of paths to JSONL files (takes precedence over jsonl_path)
             transforms: List of transform functions
             base_h: Base height for resizing
             base_shape: List of [width, height] shapes for multi-scale
@@ -33,31 +35,41 @@ class SVTRv2Dataset(Dataset):
         super().__init__()
         self.data_dir = Path(data_dir)
         
-        # Default to dataset.jsonl in data_dir
-        if jsonl_path is None:
-            jsonl_path = self.data_dir / "dataset.jsonl"
+        # Determine which JSONL files to load
+        if jsonl_paths is not None:
+            # Multiple JSONL files provided
+            if isinstance(jsonl_paths, (str, Path)):
+                jsonl_paths = [jsonl_paths]
+            jsonl_paths = [Path(p) if not isinstance(p, Path) else p for p in jsonl_paths]
+        elif jsonl_path is not None:
+            # Single JSONL file provided (backward compatibility)
+            jsonl_paths = [Path(jsonl_path)]
         else:
-            jsonl_path = Path(jsonl_path)
+            # Default to dataset.jsonl in data_dir
+            jsonl_paths = [self.data_dir / "dataset.jsonl"]
         
-        # Load data from JSONL
+        # Load data from all JSONL files
         self.samples = []
-        with open(jsonl_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                item = json.loads(line)
-                filename = item["filename"]
-                text = item["text"]
-                
-                # Handle relative paths
-                if filename.startswith("imgs/"):
-                    img_path = self.data_dir / filename
-                else:
-                    img_path = self.data_dir / "imgs" / filename
-                
-                if img_path.exists():
-                    self.samples.append({"image_path": str(img_path), "label": text})
+        for jsonl_path in jsonl_paths:
+            if not jsonl_path.exists():
+                continue
+            with open(jsonl_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    item = json.loads(line)
+                    filename = item["filename"]
+                    text = item["text"]
+                    
+                    # Handle relative paths
+                    if filename.startswith("imgs/"):
+                        img_path = self.data_dir / filename
+                    else:
+                        img_path = self.data_dir / "imgs" / filename
+                    
+                    if img_path.exists():
+                        self.samples.append({"image_path": str(img_path), "label": text})
         
         self.transforms = transforms or []
         self.base_h = base_h

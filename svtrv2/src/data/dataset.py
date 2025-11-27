@@ -3,10 +3,13 @@ import json
 import random
 from pathlib import Path
 
+import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 from torchvision.transforms import functional as F
+
+from .label_encode import CTCLabelEncoder
 
 
 class SVTRv2Dataset(Dataset):
@@ -20,6 +23,8 @@ class SVTRv2Dataset(Dataset):
         base_shape=None,
         padding=True,
         max_text_length=25,
+        character_dict_path=None,
+        use_space_char=False,
     ):
         """
         Args:
@@ -62,11 +67,14 @@ class SVTRv2Dataset(Dataset):
                     filename = item["filename"]
                     text = item["text"]
                     
-                    # Handle relative paths
-                    if filename.startswith("imgs/"):
+                    # Handle relative paths (imgs/, train/, val/, etc.)
+                    if filename.startswith(("imgs/", "train/", "val/")):
                         img_path = self.data_dir / filename
                     else:
+                        # Try imgs/ first, then try as direct path
                         img_path = self.data_dir / "imgs" / filename
+                        if not img_path.exists():
+                            img_path = self.data_dir / filename
                     
                     if img_path.exists():
                         self.samples.append({"image_path": str(img_path), "label": text})
@@ -76,6 +84,13 @@ class SVTRv2Dataset(Dataset):
         self.base_shape = base_shape or [[64, 32], [96, 32], [128, 32], [160, 32]]
         self.padding = padding
         self.max_text_length = max_text_length
+        
+        # Label encoder
+        self.label_encoder = CTCLabelEncoder(
+            character_dict_path=character_dict_path,
+            use_space_char=use_space_char,
+            max_text_length=max_text_length,
+        )
         
         # Image normalization
         self.normalize = T.Compose([
@@ -112,32 +127,40 @@ class SVTRv2Dataset(Dataset):
         img = data["image"]
         w, h = img.size
         
-        # Simple resize: maintain aspect ratio, pad if needed
+        # Resize to target height while maintaining aspect ratio
         target_h = self.base_h
         target_w = int(w * target_h / h)
         
         # Resize
         img = F.resize(img, (target_h, target_w), interpolation=self.interpolation)
         
-        # Pad to fixed width if needed (use max width from base_shape)
-        max_w = max([s[0] for s in self.base_shape])
-        if target_w < max_w and self.padding:
-            pad_w = max_w - target_w
-            # Random padding position
-            if random.random() < 0.5:
-                img = F.pad(img, [0, 0, pad_w, 0], fill=0.0)
-            else:
-                img = F.pad(img, [pad_w, 0, 0, 0], fill=0.0)
-        elif target_w > max_w:
-            # Crop if too wide
+        # Optional: Limit max width during training (for memory efficiency)
+        # Padding will be handled by collate_fn to ensure batch consistency
+        max_w = max([s[0] for s in self.base_shape]) if self.base_shape else None
+        if max_w and target_w > max_w:
+            # Crop if too wide (only during training)
             img = F.crop(img, 0, 0, target_h, max_w)
         
         # Normalize
         img = self.normalize(img)
         
+        # Encode label to indices
+        label_indices = self.label_encoder.encode(label)
+        if label_indices is None:
+            # If encoding fails, return a random sample
+            return self.__getitem__(random.randint(0, len(self.samples) - 1))
+        
+        # Calculate actual label length (original text length before padding)
+        # The encoded label is padded to max_text_length, so we need to find the actual length
+        # by counting non-blank tokens before padding
+        actual_length = len(label)  # Original text length
+        # Ensure at least 1 (CTC requires non-zero length)
+        actual_length = max(1, actual_length)
+        
         return {
             "image": img,
-            "label": label,
-            "label_length": len(label),
+            "label": label,  # Keep original string for metrics
+            "label_indices": torch.tensor(label_indices, dtype=torch.long),
+            "label_length": torch.tensor(actual_length, dtype=torch.long),
         }
 

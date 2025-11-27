@@ -2,6 +2,7 @@
 import argparse
 from pathlib import Path
 
+import numpy as np
 import torch
 from PIL import Image
 from src.data.label_encode import CTCLabelEncoder
@@ -70,15 +71,25 @@ class SVTRv2Inference:
         missing_keys = model_keys - checkpoint_keys
         unexpected_keys = checkpoint_keys - model_keys
         
+        # Count actual parameters (not just keys)
+        model_param_count = sum(p.numel() for p in self.model.parameters())
+        checkpoint_param_count = sum(p.numel() for p in state_dict.values())
+        
         print(f"Debug - Loading checkpoint from: {checkpoint_path}")
-        print(f"Debug - Model has {len(model_keys)} parameters")
-        print(f"Debug - Checkpoint has {len(checkpoint_keys)} parameters")
+        print(f"Debug - Model has {len(model_keys)} parameter groups")
+        print(f"Debug - Model has {model_param_count:,} total parameters")
+        print(f"Debug - Checkpoint has {len(checkpoint_keys)} parameter groups")
+        print(f"Debug - Checkpoint has {checkpoint_param_count:,} total parameters")
         print(f"Debug - Missing keys: {len(missing_keys)}")
         print(f"Debug - Unexpected keys: {len(unexpected_keys)}")
         if missing_keys:
             print(f"Debug - First 10 missing keys: {list(missing_keys)[:10]}")
         if unexpected_keys:
             print(f"Debug - First 10 unexpected keys: {list(unexpected_keys)[:10]}")
+        
+        # Show sample model keys
+        print(f"Debug - Sample model keys: {list(model_keys)[:5]}")
+        print(f"Debug - Sample checkpoint keys: {list(checkpoint_keys)[:5]}")
         
         # Load with strict=False to allow partial loading
         load_result = self.model.load_state_dict(state_dict, strict=False)
@@ -187,8 +198,9 @@ class SVTRv2Inference:
             with torch.no_grad():
                 preds = self.model(img_tensor)
             
-            # Debug: Check model output (only for first image to avoid spam)
-            if len(results) == 0:
+            # Debug: Check model output (only for first inference to avoid spam)
+            if self._first_inference:
+                self._first_inference = False
                 print(f"Debug - Model output shape: {preds.shape}")
                 print(f"Debug - Model output min/max: {preds.min().item():.4f} / {preds.max().item():.4f}")
                 print(f"Debug - Model output mean: {preds.mean().item():.4f}")
@@ -265,6 +277,60 @@ class SVTRv2Inference:
         # Inference
         with torch.no_grad():
             preds = self.model(batch_tensor)
+        
+        # Debug: Check model output (only for first inference to avoid spam)
+        if self._first_inference:
+            self._first_inference = False
+            print(f"Debug - Model output shape: {preds.shape}")
+            print(f"Debug - Model output min/max: {preds.min().item():.4f} / {preds.max().item():.4f}")
+            print(f"Debug - Model output mean: {preds.mean().item():.4f}")
+            
+            # Debug: Check if model is in eval mode
+            print(f"Debug - Model training mode: {self.model.training}")
+            if hasattr(self.model, 'decoder'):
+                print(f"Debug - Decoder training mode: {self.model.decoder.training}")
+            
+            # Debug: Check argmax predictions
+            preds_np = preds.detach().cpu().numpy()
+            preds_idx_debug = preds_np.argmax(axis=2)
+            unique_indices = sorted(set(preds_idx_debug.flatten()))
+            print(f"Debug - Unique predicted indices: {unique_indices[:10]}")  # Show first 10
+            print(f"Debug - Most common index: {max(set(preds_idx_debug.flatten()), key=list(preds_idx_debug.flatten()).count)}")
+            
+            # Debug: Check probability distribution
+            print(f"Debug - Probability sum (should be ~1.0): {preds_np[0, 0, :].sum():.4f}")
+            print(f"Debug - Max probability at each position: {preds_np[0, :, :].max(axis=1)[:5]}")  # First 5 positions
+            print(f"Debug - Argmax at first 10 positions: {preds_idx_debug[0, :10]}")
+            
+            # Debug: Check probability distribution for index 0 vs other indices
+            prob_at_0 = preds_np[0, :, 0]  # Probability of blank token at each position
+            prob_max_other = preds_np[0, :, 1:].max(axis=1)  # Max probability of non-blank tokens
+            print(f"Debug - Probability of blank (0) at first 5 positions: {prob_at_0[:5]}")
+            print(f"Debug - Max probability of non-blank tokens at first 5 positions: {prob_max_other[:5]}")
+            print(f"Debug - Average prob of blank: {prob_at_0.mean():.4f}, Average prob of non-blank max: {prob_max_other.mean():.4f}")
+            
+            # Debug: Check top-5 predictions at first position
+            top5_indices = np.argsort(preds_np[0, 0, :])[-5:][::-1]
+            top5_probs = preds_np[0, 0, top5_indices]
+            print(f"Debug - Top-5 predicted indices at position 0: {top5_indices}")
+            print(f"Debug - Top-5 probabilities at position 0: {top5_probs}")
+            
+            # Debug: Check if model is predicting anything other than blank
+            non_zero_indices = preds_idx_debug[preds_idx_debug != 0]
+            print(f"Debug - Number of non-blank predictions: {len(non_zero_indices)} out of {preds_idx_debug.size}")
+            
+            # Debug: Check probability distribution for index 0 vs other indices
+            prob_at_0 = preds_np[0, :, 0]  # Probability of blank token at each position
+            prob_max_other = preds_np[0, :, 1:].max(axis=1)  # Max probability of non-blank tokens
+            print(f"Debug - Probability of blank (0) at first 5 positions: {prob_at_0[:5]}")
+            print(f"Debug - Max probability of non-blank tokens at first 5 positions: {prob_max_other[:5]}")
+            print(f"Debug - Average prob of blank: {prob_at_0.mean():.4f}, Average prob of non-blank max: {prob_max_other.mean():.4f}")
+            
+            # Debug: Check top-5 predictions at first position
+            top5_indices = np.argsort(preds_np[0, 0, :])[-5:][::-1]
+            top5_probs = preds_np[0, 0, top5_indices]
+            print(f"Debug - Top-5 predicted indices at position 0: {top5_indices}")
+            print(f"Debug - Top-5 probabilities at position 0: {top5_probs}")
         
         # Post-process
         pred_texts = self.postprocess(preds, batch=None, torch_tensor=True)

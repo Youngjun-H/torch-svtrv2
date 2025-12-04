@@ -1,0 +1,129 @@
+import json
+import random
+import shutil
+from pathlib import Path
+
+
+def create_jsonl_from_lpdataset(dataset_dir, dataset_name, output_base_dir, seed=42):
+    """
+    LPDataset 디렉토리를 분석하여 train/val 데이터셋을 생성합니다.
+    각 라벨(폴더)에서 랜덤으로 이미지 1장을 선택하여 validation set으로 분리합니다.
+    
+    Args:
+        dataset_dir: 원본 데이터셋 디렉토리 경로 (예: LPDataset_1120_raw)
+        dataset_name: 데이터셋 이름 (예: "LPDataset_1120")
+        output_base_dir: 출력할 기본 디렉토리 경로
+        seed: 랜덤 시드 (기본값: 42)
+    """
+    random.seed(seed)
+    
+    dataset_path = Path(dataset_dir)
+    output_base_path = Path(output_base_dir)
+    
+    # 데이터셋 디렉토리 구조 생성: dataset_name/train, dataset_name/val
+    dataset_output_path = output_base_path / dataset_name
+    train_path = dataset_output_path / "train"
+    val_path = dataset_output_path / "val"
+    
+    train_path.mkdir(parents=True, exist_ok=True)
+    val_path.mkdir(parents=True, exist_ok=True)
+    
+    # train과 val 항목을 저장할 리스트
+    train_entries = []
+    val_entries = []
+    
+    train_copied_count = 0
+    val_copied_count = 0
+    label_count = 0
+    
+    # 디렉토리 내의 모든 하위 디렉토리 순회
+    for subdir in sorted(dataset_path.iterdir()):
+        if not subdir.is_dir():
+            continue
+            
+        # label.txt 파일 읽기
+        label_file = subdir / "label.txt"
+        if not label_file.exists():
+            continue
+            
+        # label.txt에서 번호판 번호 읽기
+        with open(label_file, 'r', encoding='utf-8') as f:
+            label_text = f.read().strip()
+        
+        if not label_text:
+            continue
+        
+        # 디렉토리 내의 모든 이미지 파일 찾기
+        image_files = sorted([f for f in subdir.iterdir() 
+                             if f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']])
+        
+        if len(image_files) == 0:
+            continue
+        
+        label_count += 1
+        
+        # 각 라벨에서 랜덤으로 이미지 1장을 선택하여 validation set으로
+        val_image = random.choice(image_files)
+        train_images = [img for img in image_files if img != val_image]
+        
+        # Validation 이미지 복사 및 JSONL 항목 생성
+        val_dest_path = val_path / val_image.name
+        if not val_dest_path.exists():
+            shutil.copy2(val_image, val_dest_path)
+            val_copied_count += 1
+        
+        # JSONL 파일이 dataset_output_path에 있으므로, 상대 경로는 "val/파일명.jpg"
+        val_relative_path = f"val/{val_image.name}"
+        val_entry = {
+            "filename": val_relative_path,
+            "text": label_text
+        }
+        val_entries.append(val_entry)
+        
+        # Train 이미지들 복사 및 JSONL 항목 생성
+        for img_file in train_images:
+            train_dest_path = train_path / img_file.name
+            if not train_dest_path.exists():
+                shutil.copy2(img_file, train_dest_path)
+                train_copied_count += 1
+            
+            # JSONL 파일이 dataset_output_path에 있으므로, 상대 경로는 "train/파일명.jpg"
+            train_relative_path = f"train/{img_file.name}"
+            train_entry = {
+                "filename": train_relative_path,
+                "text": label_text
+            }
+            train_entries.append(train_entry)
+    
+    # JSONL 파일로 저장
+    train_jsonl_path = dataset_output_path / "train.jsonl"
+    val_jsonl_path = dataset_output_path / "val.jsonl"
+    
+    with open(train_jsonl_path, 'w', encoding='utf-8') as f:
+        for entry in train_entries:
+            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    
+    with open(val_jsonl_path, 'w', encoding='utf-8') as f:
+        for entry in val_entries:
+            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    
+    print(f"총 {label_count}개의 라벨이 처리되었습니다.")
+    print(f"Train: {len(train_entries)}개 항목, {train_copied_count}개 이미지 파일이 {train_path}로 복사되었습니다.")
+    print(f"Val: {len(val_entries)}개 항목, {val_copied_count}개 이미지 파일이 {val_path}로 복사되었습니다.")
+    print(f"Train JSONL: {train_jsonl_path}")
+    print(f"Val JSONL: {val_jsonl_path}")
+    
+    return train_entries, val_entries
+
+if __name__ == "__main__":
+    # 원본 데이터셋 디렉토리 경로
+    dataset_dir = "/home/yjhwang/work/datasets/LPR/raw/LPDataset_1120_raw"
+    
+    # 데이터셋 이름 (원본 디렉토리명에서 _raw를 제거하거나 직접 지정)
+    dataset_name = "LPDataset_1120"
+    
+    # 출력할 기본 디렉토리 경로
+    output_base_dir = "/home/yjhwang/work/datasets/LPR"
+    
+    create_jsonl_from_lpdataset(dataset_dir, dataset_name, output_base_dir)
+

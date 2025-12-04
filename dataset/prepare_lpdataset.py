@@ -37,36 +37,51 @@ def create_jsonl_from_lpdataset(dataset_dir, dataset_name, output_base_dir, seed
     val_copied_count = 0
     label_count = 0
 
-    # 디렉토리 내의 모든 하위 디렉토리 순회
+    # 먼저 유효한 라벨 디렉토리 목록 수집
+    print("데이터셋 디렉토리 스캔 중...")
+    valid_subdirs = []
     for subdir in sorted(dataset_path.iterdir()):
         if not subdir.is_dir():
             continue
 
-        # label.txt 파일 읽기
         label_file = subdir / "label.txt"
         if not label_file.exists():
             continue
 
-        # label.txt에서 번호판 번호 읽기
         with open(label_file, "r", encoding="utf-8") as f:
             label_text = f.read().strip()
 
         if not label_text:
             continue
 
-        # 디렉토리 내의 모든 이미지 파일 찾기
-        image_files = sorted(
-            [
-                f
-                for f in subdir.iterdir()
-                if f.is_file() and f.suffix.lower() in [".jpg", ".jpeg", ".png"]
-            ]
-        )
+        image_files = [
+            f
+            for f in subdir.iterdir()
+            if f.is_file() and f.suffix.lower() in [".jpg", ".jpeg", ".png"]
+        ]
 
         if len(image_files) == 0:
             continue
 
+        valid_subdirs.append((subdir, label_text, image_files))
+
+    total_labels = len(valid_subdirs)
+    print(f"총 {total_labels}개의 유효한 라벨 디렉토리를 찾았습니다.")
+    print("데이터셋 처리 시작...\n")
+
+    # 디렉토리 내의 모든 하위 디렉토리 순회
+    for idx, (subdir, label_text, image_files) in enumerate(valid_subdirs, 1):
+        # 진행 상황 출력 (10개마다 또는 마지막)
+        if idx % 10 == 0 or idx == total_labels:
+            progress = (idx / total_labels) * 100
+            print(
+                f"[{idx}/{total_labels}] 진행률: {progress:.1f}% - 현재 처리 중: {subdir.name}"
+            )
+
         label_count += 1
+
+        # 이미지 파일 정렬
+        image_files = sorted(image_files)
 
         # 이미지가 5장 이하인 경우 validation set을 만들지 않고 모든 이미지를 train으로 사용
         if len(image_files) <= 5:
@@ -111,6 +126,7 @@ def create_jsonl_from_lpdataset(dataset_dir, dataset_name, output_base_dir, seed
                 train_entries.append(train_entry)
 
     # JSONL 파일로 저장
+    print("\nJSONL 파일 저장 중...")
     train_jsonl_path = dataset_output_path / "train.jsonl"
     val_jsonl_path = dataset_output_path / "val.jsonl"
 
@@ -122,6 +138,9 @@ def create_jsonl_from_lpdataset(dataset_dir, dataset_name, output_base_dir, seed
         for entry in val_entries:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
+    print("=" * 80)
+    print("처리 완료!")
+    print("=" * 80)
     print(f"총 {label_count}개의 라벨이 처리되었습니다.")
     print(
         f"Train: {len(train_entries)}개 항목, {train_copied_count}개 이미지 파일이 {train_path}로 복사되었습니다."
@@ -137,12 +156,12 @@ def create_jsonl_from_lpdataset(dataset_dir, dataset_name, output_base_dir, seed
 
 if __name__ == "__main__":
     # 원본 데이터셋 디렉토리 경로
-    dataset_dir = "/purestorage/AILAB/AI_2/datasets/LPR"
+    dataset_dir = "/purestorage/AILAB/AI_2/datasets/LPR/raw/LPDataset_v1.0.0"
 
     # 데이터셋 이름 (원본 디렉토리명에서 _raw를 제거하거나 직접 지정)
-    dataset_name = "LPDataset_v1.0.0"
+    dataset_name = "v1.0.0"
 
     # 출력할 기본 디렉토리 경로
-    output_base_dir = "/purestorage/AILAB/AI_2/datasets/LPR/v1.0.0"
+    output_base_dir = "/purestorage/AILAB/AI_2/datasets/LPR/processed"
 
     create_jsonl_from_lpdataset(dataset_dir, dataset_name, output_base_dir)

@@ -14,7 +14,7 @@ Global:
   use_tensorboard: false
   infer_img:
   # for data or label process
-  character_dict_path: &character_dict_path ./dict/korean_dict.txt
+  character_dict_path: &character_dict_path svtrv2/dict/korean_dict.txt
   max_text_length: &max_text_length 25
   use_space_char: &use_space_char False
   save_res_path: ./output/svtrv2_rctc/test1/predicts_svtrv2_rctc.txt
@@ -66,7 +66,7 @@ Train:
     name: RatioDataSetTVResize
     ds_width: True
     padding: False
-    data_dir_list: ['~/work/datasets/LPR/LPDataset_1120']
+    data_dir_list: ['/purestorage/AILAB/AI_2/datasets/LPR/processed/v1.0.0']
     jsonl_file: train.jsonl  # Use train.jsonl instead of dataset.jsonl
     transforms:
       - DecodeImagePIL: # load image
@@ -98,7 +98,7 @@ Eval:
     name: RatioDataSetTVResize
     ds_width: True
     padding: False
-    data_dir_list: ['~/work/datasets/LPR/LPDataset_1120']
+    data_dir_list: ['/purestorage/AILAB/AI_2/datasets/LPR/processed/v1.0.0']
     jsonl_file: val.jsonl  # Use val.jsonl instead of dataset.jsonl
     transforms:
       - DecodeImagePIL: # load image

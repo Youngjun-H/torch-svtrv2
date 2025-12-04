@@ -61,16 +61,6 @@ class BaseRecLabelDecode:
             char_list = []
             valid_indices = text_indices[valid_selection]
             if len(valid_indices) == 0:
-                # Debug: Check why no valid indices
-                if batch_idx == 0:  # Only print for first batch to avoid spam
-                    print(f"Debug - No valid indices after filtering")
-                    print(f"Debug - Original text_index length: {len(text_index[batch_idx])}")
-                    print(f"Debug - Selection after duplicate removal: {selection.sum()}")
-                    print(f"Debug - Selection after ignored tokens: {(text_indices != ignored_tokens[0]).sum()}")
-                    print(f"Debug - Valid selection: {valid_selection.sum()}")
-                    unique_indices = list(set(text_indices.tolist()))[:10]
-                    print(f"Debug - Unique indices in original: {unique_indices}")
-                    print(f"Debug - All indices are blank (0)? {all(idx == 0 for idx in text_indices)}")
                 # If no valid indices, return empty string
                 result_list.append(("", 0.0))
                 continue

@@ -115,7 +115,19 @@ class LitSVTRv2(L.LightningModule):
         self.metric((pred_texts, label_list))
         
         # Log metrics (don't show in progress bar during step, only at epoch end)
+        # Use 'val_loss' instead of 'val/loss' for better compatibility with ModelCheckpoint
         batch_size = images.size(0)
+        self.log(
+            "val_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+            batch_size=batch_size,
+            sync_dist=True,
+        )
+        # Also log as 'val/loss' for consistency with other metrics
         self.log(
             "val/loss",
             loss,
